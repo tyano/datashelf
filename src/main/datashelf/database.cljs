@@ -28,7 +28,8 @@
                 (when (and callback db)
                   (callback (make-db-instance db) {:old-version old-version
                                                    :new-version new-version
-                                                   :transaction (make-transaction-instance tx)})))))
+                                                   :transaction (make-transaction-instance tx)
+                                                   :event e})))))
 
       (set! (.-onsuccess open-request)
             (fn [_]
