@@ -1,15 +1,12 @@
 (ns datashelf.object-store
   (:refer-clojure :exclude [count get])
-  (:require [datashelf.lang.core :refer [keep-keys to-camel-case]]
+  (:require [clojure.core.async :refer [promise-chan]]
+            [datashelf.cursor :refer [make-cursor-instance]]
+            [datashelf.key-range :refer [key-range?] :as key-range]
+            [datashelf.lang.core :refer [flatten-map keep-keys to-camel-case]]
             [datashelf.lang.string-list :refer [to-vector]]
-            [datashelf.database :refer [make-transaction-instance]]
-            [clojure.core.async :refer [promise-chan go >! close!]]
-            [databox.core :as databox]
-            [datashelf.key-range :refer [key-range?] :as key-range]))
-
-(defn make-index-instance
-  [js-index]
-  {:index js-index})
+            [datashelf.request :refer [setup-request-handlers]]
+            [datashelf.transaction :refer [make-transaction-instance]]))
 
 (defn index-names
   [{:keys [object-store]}]
@@ -35,27 +32,6 @@
   [{:keys [object-store]}]
   {:pre [object-store]}
   (.-autoIncrement object-store))
-
-(defn setup-request-handlers
-  [request ch & [result-fn]]
-  (set! (.-onsuccess request)
-        (fn [e]
-          (let [result (.-result request)
-                result (if result-fn (result-fn result) result)]
-            (go
-              (>! ch (databox/success result))
-              (close! ch)))))
-
-  (set! (.-onerror request)
-        (fn [_]
-          (let [error (.-error request)]
-            (go
-              (>! ch (databox/failure error))
-              (close! ch))))))
-
-(defn- flatten-map
-  [m]
-  (-> m seq flatten))
 
 (defn add
   ([{:keys [object-store]} value key options]
@@ -189,11 +165,6 @@
   {:pre [object-store index-name]}
   (make-index-instance (.index object-store index-name)))
 
-(defn- to-cursor
-  [js-cursor]
-  ;;TODO
-  )
-
 (defn open-cursor
   [{:keys [object-store]} query direction]
   {:pre [object-store (if direction (#{:next :nextunique :prev :prevunique} direction) true)]}
@@ -208,7 +179,7 @@
                   
                   :else
                   (.openCursor object-store))]
-    (setup-request-handlers request ch to-cursor)
+    (setup-request-handlers request ch make-cursor-instance)
     ch))
 
 (defn open-key-cursor
@@ -225,7 +196,7 @@
 
                   :else
                   (.openKeyCursor object-store))]
-    (setup-request-handlers request ch to-cursor)
+    (setup-request-handlers request ch make-cursor-instance)
     ch))
 
 (defn put

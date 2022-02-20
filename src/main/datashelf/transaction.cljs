@@ -1,6 +1,11 @@
 (ns datashelf.transaction
-  (:require [datashelf.database :refer [make-db-instance make-object-store-instance]]
-            [datashelf.lang.string-list :refer [to-vector]]))
+  (:require [datashelf.database.instance :refer [make-db-instance]]
+            [datashelf.lang.string-list :refer [to-vector]]
+            [datashelf.object-store.instance :refer [make-object-store-instance]]))
+
+(defn make-transaction-instance
+  [js-tx]
+  {:transaction js-tx})
 
 (defn db
   [{:keys [transaction]}]

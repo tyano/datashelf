@@ -69,3 +69,7 @@
   (when value
     (let [[head & others] (string/split value "-")]
       (string/join (cons head (map string/capitalize others))))))
+
+(defn flatten-map
+  [m]
+  (-> m seq flatten))

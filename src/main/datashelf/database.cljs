@@ -1,19 +1,10 @@
 (ns datashelf.database
-  (:require [clojure.core.async :refer [promise-chan go >! <! close!]]
+  (:require [clojure.core.async :refer [>! close! go promise-chan]]
+            [databox.core :as databox]
             [datashelf.lang.core :refer [keep-keys to-camel-case]]
-            [databox.core :as databox]))
-
-(defn make-db-instance
-  [js-db]
-  {:db js-db})
-
-(defn make-object-store-instance
-  [js-object-store]
-  {:object-store js-object-store})
-
-(defn make-transaction-instance
-  [js-tx]
-  {:transaction js-tx})
+            [datashelf.object-store.instance :refer [make-object-store-instance]]
+            [datashelf.transaction :refer [make-transaction-instance]]
+            [datashelf.database.instance :refer [make-db-instance]]))
 
 (defn create-object-store
   [{:keys [db]} store-name options]
@@ -50,25 +41,25 @@
                   (>! ch (databox/failure error)))))))
     ch))
 
-(defn delete-all-databases
-  []
-  (-> js/indexedDB
-      (.databases)
-      (.then (fn [r]
-               (doseq [i (range 0 (alength r))]
-                 (let [db (aget r i)
-                       db-name (.-name db)]
-                   (.deleteDatabase js/indexedDB db-name)))))))
+;; (defn delete-all-databases
+;;   []
+;;   (-> js/indexedDB
+;;       (.databases)
+;;       (.then (fn [r]
+;;                (doseq [i (range 0 (alength r))]
+;;                  (let [db (aget r i)
+;;                        db-name (.-name db)]
+;;                    (.deleteDatabase js/indexedDB db-name)))))))
 
-(defn show-all-databases
-  []
-  (-> js/indexedDB
-      (.databases)
-      (.then (fn [r]
-               (doseq [i (range 0 (alength r))]
-                 (let [db (aget r i)
-                       db-name (.-name db)]
-                   (println db)))))))
+;; (defn show-all-databases
+;;   []
+;;   (-> js/indexedDB
+;;       (.databases)
+;;       (.then (fn [r]
+;;                (doseq [i (range 0 (alength r))]
+;;                  (let [db (aget r i)
+;;                        db-name (.-name db)]
+;;                    (println db)))))))
 
 (defn contains-object-store?
   [{:keys [db]} store-name]
