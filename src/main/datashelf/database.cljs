@@ -41,25 +41,25 @@
                   (>! ch (databox/failure error)))))))
     ch))
 
-;; (defn delete-all-databases
-;;   []
-;;   (-> js/indexedDB
-;;       (.databases)
-;;       (.then (fn [r]
-;;                (doseq [i (range 0 (alength r))]
-;;                  (let [db (aget r i)
-;;                        db-name (.-name db)]
-;;                    (.deleteDatabase js/indexedDB db-name)))))))
+(defn delete-all-databases
+  []
+  (-> js/indexedDB
+      (.databases)
+      (.then (fn [r]
+               (doseq [i (range 0 (alength r))]
+                 (let [db (aget r i)
+                       db-name (.-name db)]
+                   (.deleteDatabase js/indexedDB db-name)))))))
 
-;; (defn show-all-databases
-;;   []
-;;   (-> js/indexedDB
-;;       (.databases)
-;;       (.then (fn [r]
-;;                (doseq [i (range 0 (alength r))]
-;;                  (let [db (aget r i)
-;;                        db-name (.-name db)]
-;;                    (println db)))))))
+(defn show-all-databases
+  []
+  (-> js/indexedDB
+      (.databases)
+      (.then (fn [r]
+               (doseq [i (range 0 (alength r))]
+                 (let [db (aget r i)
+                       db-name (.-name db)]
+                   (println db)))))))
 
 (defn contains-object-store?
   [{:keys [db]} store-name]
