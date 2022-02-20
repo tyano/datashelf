@@ -1,5 +1,5 @@
 (ns datashelf.cursor
-  (:refer-clojure :exclude [update])
+  (:refer-clojure :exclude [update key])
   (:require [clojure.core.async :refer [promise-chan]]
             [datashelf.lang.core :refer [flatten-map]]
             [datashelf.request :refer [setup-request-handlers]]))
