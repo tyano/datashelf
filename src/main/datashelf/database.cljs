@@ -19,11 +19,16 @@
   (let [ch (promise-chan)]
     (let [open-request (.open js/indexedDB db-name (when version (long version)))]
       (set! (.-onupgradeneeded open-request)
-            (fn [_]
-              (println "upgrade")
-              (let [db (.-result open-request)]
+            (fn [e]
+              (let [old-version (.-oldVersion e)
+                    new-version (.-newVersion e)
+                    tx (.-transaction open-request)
+                    db (.-result open-request)]
+                (js/console.log tx)
                 (when (and callback db)
-                  (callback (make-db-instance db))))))
+                  (callback (make-db-instance db) {:old-version old-version
+                                                   :new-version new-version
+                                                   :transaction (make-transaction-instance tx)})))))
 
       (set! (.-onsuccess open-request)
             (fn [_]
