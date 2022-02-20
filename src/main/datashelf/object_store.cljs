@@ -1,12 +1,14 @@
 (ns datashelf.object-store
-  (:refer-clojure :exclude [count get])
-  (:require [clojure.core.async :refer [promise-chan]]
+  (:refer-clojure :exclude [count get name key])
+  (:require [clojure.core :as core]
+            [clojure.core.async :refer [promise-chan]]
             [datashelf.cursor :refer [make-cursor-instance]]
             [datashelf.key-range :refer [key-range?] :as key-range]
             [datashelf.lang.core :refer [flatten-map keep-keys to-camel-case]]
             [datashelf.lang.string-list :refer [to-vector]]
             [datashelf.request :refer [setup-request-handlers]]
-            [datashelf.transaction :refer [make-transaction-instance]]))
+            [datashelf.transaction :refer [make-transaction-instance]]
+            [datashelf.object-store.instance :refer [make-index-instance]]))
 
 (defn index-names
   [{:keys [object-store]}]
@@ -38,6 +40,7 @@
    {:pre [object-store]}
    (let [ch (promise-chan)
          data    (apply clj->js value (flatten-map options))
+         _ (println "data:" data)
          request (if key
                    (.add object-store data key)
                    (.add object-store data))]
@@ -45,7 +48,10 @@
      ch))
   
   ([object-store-instance value options]
-   (add object-store-instance value nil options)))
+   (add object-store-instance value nil options))
+  
+  ([object-store-instance value]
+   (add object-store-instance value nil)))
 
 (defn clear
   [{:keys [object-store]}]
@@ -73,14 +79,14 @@
    (count instance nil)))
 
 (defn create-index
-  [{:keys [object-store]} key-path & [options]]
-  {:pre [object-store key-path]}
+  [{:keys [object-store]} index-name key-path & [options]]
+  {:pre [object-store index-name key-path]}
   (let [index-data (if options
                      (let [js-opts (-> options
-                                       (keep-keys #(-> % name to-camel-case))
+                                       (keep-keys #(-> % core/name to-camel-case))
                                        (clj->js))]
-                       (.createIndex object-store key-path js-opts))
-                     (.createIndex object-store key-path))]
+                       (.createIndex object-store index-name key-path js-opts))
+                     (.createIndex object-store index-name key-path))]
     (make-index-instance index-data)))
 
 (defn delete
@@ -172,7 +178,7 @@
         range (resolve-key-range query)
         request (cond
                   (and range direction)
-                  (.openCursor object-store range (name direction))
+                  (.openCursor object-store range (core/name direction))
                   
                   range
                   (.openCursor object-store range)
@@ -189,7 +195,7 @@
         range (resolve-key-range query)
         request (cond
                   (and range direction)
-                  (.openKeyCursor object-store range (name direction))
+                  (.openKeyCursor object-store range (core/name direction))
 
                   range
                   (.openKeyCursor object-store range)
