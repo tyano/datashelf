@@ -1,12 +1,5 @@
 ;; shadow-cljs configuration
-{:source-paths
- ["src/dev"
-  "src/main"
-  "src/test"]
-
- :dependencies
- [[databox "0.2.0-SNAPSHOT"]]
-
+{:lein true
  :builds
  {:main {:target :browser
          :output-dir "public/assets/datashelf/js"
