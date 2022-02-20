@@ -1,4 +1,4 @@
-(defproject datashelf "1.0-SNAPSHOT"
+(defproject com.shelfinc/datashelf "1.0-SNAPSHOT"
   :description "CLJS library for IndexedDB of Javascript"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
