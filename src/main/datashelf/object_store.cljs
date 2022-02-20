@@ -37,7 +37,7 @@
 
 (defn add
   ([{:keys [object-store]} value key options]
-   {:pre [object-store]}
+   {:pre [object-store value (map? value)]}
    (let [ch (promise-chan)
          data    (apply clj->js value (flatten-map options))
          _ (println "data:" data)

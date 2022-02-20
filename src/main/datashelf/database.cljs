@@ -46,6 +46,13 @@
                   (>! ch (databox/failure error)))))))
     ch))
 
+(defn upgrade-db-fn
+  [old-version fns]
+  (doseq [[version f] (into (sorted-map) fns)]
+    (when (< old-version version)
+      (println "upgrade db to version" version)
+      (f))))
+
 (defn delete-all-databases
   []
   (-> js/indexedDB
