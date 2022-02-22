@@ -4,7 +4,8 @@
             [datashelf.lang.core :refer [keep-keys to-camel-case]]
             [datashelf.object-store.instance :refer [make-object-store-instance]]
             [datashelf.transaction :refer [make-transaction-instance]]
-            [datashelf.database.instance :refer [make-db-instance]]))
+            [datashelf.database.instance :refer [make-db-instance]]
+            [taoensso.timbre :refer-macros [debug] :as timbre]))
 
 (defn create-object-store
   [{:keys [db]} store-name options]
@@ -33,7 +34,7 @@
 
       (set! (.-onsuccess open-request)
             (fn [_]
-              (println "success")
+              (debug "success")
               (let [db (.-result open-request)]
                 (go
                   (>! ch (databox/success (make-db-instance db)))
@@ -41,7 +42,7 @@
 
       (set! (.-onerror open-request)
             (fn [_]
-              (println "error")
+              (debug "error")
               (let [error (.-error open-request)]
                 (go
                   (>! ch (databox/failure error)))))))
@@ -51,7 +52,7 @@
   [old-version fns]
   (doseq [[version f] (into (sorted-map) fns)]
     (when (< old-version version)
-      (println "upgrade db to version" version)
+      (debug "upgrade db to version" version)
       (f))))
 
 (defn delete-all-databases
@@ -72,7 +73,7 @@
                (doseq [i (range 0 (alength r))]
                  (let [db (aget r i)
                        db-name (.-name db)]
-                   (println db)))))))
+                   (debug db)))))))
 
 (defn contains-object-store?
   [{:keys [db]} store-name]
@@ -83,7 +84,7 @@
   ([{:keys [db]} store-names access-mode options]
    {:pre [db
           store-names
-          (if access-mode (#{"readwrite"} access-mode) true)]}
+          (if access-mode (#{"readwrite" "readonly"} access-mode) true)]}
    (make-transaction-instance
     (if (seq options)
       (let [js-opts (-> options

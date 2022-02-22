@@ -1,14 +1,16 @@
 (ns datashelf.object-store
   (:refer-clojure :exclude [count get name key])
   (:require [clojure.core :as core]
-            [clojure.core.async :refer [promise-chan]]
-            [datashelf.cursor :refer [make-cursor-instance]]
+            [clojure.core.async :refer [promise-chan chan put! close!]]
+            [datashelf.cursor :refer [make-cursor-instance] :as csr]
             [datashelf.key-range :refer [key-range?] :as key-range]
-            [datashelf.lang.core :refer [flatten-map keep-keys to-camel-case]]
+            [datashelf.lang.core :refer [flatten-map keep-keys to-camel-case] :as lang]
             [datashelf.lang.string-list :refer [to-vector]]
             [datashelf.request :refer [setup-request-handlers]]
             [datashelf.transaction :refer [make-transaction-instance]]
-            [datashelf.object-store.instance :refer [make-index-instance]]))
+            [datashelf.object-store.instance :refer [make-index-instance]]
+            [taoensso.timbre :refer-macros [debug] :as timbre]
+            [databox.core :as databox]))
 
 (defn index-names
   [{:keys [object-store]}]
@@ -40,7 +42,6 @@
    {:pre [object-store value (map? value)]}
    (let [ch (promise-chan)
          data    (apply clj->js value (flatten-map options))
-         _ (println "data:" data)
          request (if key
                    (.add object-store data key)
                    (.add object-store data))]
@@ -103,20 +104,26 @@
   (.deleteIndex object-store index-name))
 
 (defn get
-  [{:keys [object-store]} key]
-  {:pre [object-store key]}
-  (let [ch (promise-chan)
-        request (.get object-store key)]
-    (setup-request-handlers request ch #(js->clj %))
-    ch))
+  ([{:keys [object-store]} key options]
+   {:pre [object-store key]}
+   (let [ch (promise-chan)
+         request (.get object-store key)]
+     (setup-request-handlers request ch #(lang/js->clj % options))
+     ch))
+  
+  ([instance key]
+   (get instance key nil)))
 
 (defn get-key
-  [{:keys [object-store]} key options]
-  {:pre [object-store key]}
-  (let [ch (promise-chan)
-        request (.getKey object-store (resolve-key-range key))]
-    (setup-request-handlers request ch #(apply js->clj % (flatten-map options)))
-    ch))
+  ([{:keys [object-store]} key options]
+   {:pre [object-store key]}
+   (let [ch (promise-chan)
+         request (.getKey object-store (resolve-key-range key))]
+     (setup-request-handlers request ch #(lang/js->clj % options))
+     ch))
+  
+  ([instance key]
+   (get-key instance key nil)))
 
 (defn get-all
   ([{:keys [object-store]} query count options]
@@ -133,14 +140,17 @@
                    
                    :else
                    (.getAll object-store))]
-     (setup-request-handlers request ch #(apply js->clj % (flatten-map options)))
+     (setup-request-handlers request ch #(lang/js->clj % options))
      ch))
   
   ([instance query options]
    (get-all instance query nil options))
   
   ([instance options]
-   (get-all instance nil options)))
+   (get-all instance nil options))
+  
+  ([instance]
+   (get-all instance nil)))
 
 (defn get-all-keys
   ([{:keys [object-store]} query count options]
@@ -157,53 +167,118 @@
                    
                    :else
                    (.getAllKeys object-store))]
-     (setup-request-handlers request ch #(apply js->clj % (flatten-map options)))
+     (setup-request-handlers request ch #(lang/js->clj % options))
      ch))
   
   ([instance query options]
    (get-all-keys instance query nil options))
   
   ([instance options]
-   (get-all-keys instance nil options)))
+   (get-all-keys instance nil options))
+  
+  ([instance]
+   (get-all-keys instance nil)))
 
 (defn index
   [{:keys [object-store]} index-name]
   {:pre [object-store index-name]}
   (make-index-instance (.index object-store index-name)))
 
-(defn open-cursor
-  [{:keys [object-store]} query direction]
-  {:pre [object-store (if direction (#{:next :nextunique :prev :prevunique} direction) true)]}
-  (let [ch (promise-chan)
-        range (resolve-key-range query)
-        request (cond
-                  (and range direction)
-                  (.openCursor object-store range (core/name direction))
-                  
-                  range
-                  (.openCursor object-store range)
-                  
-                  :else
-                  (.openCursor object-store))]
-    (setup-request-handlers request ch make-cursor-instance)
-    ch))
+(defn open-cursor  
+  ([{:keys [object-store] :as instance} query direction callback]
+   {:pre [object-store (if direction (#{:next :nextunique :prev :prevunique} direction) true)]}
+   (let [range (resolve-key-range query)
+         request (cond
+                   (and range direction)
+                   (do
+                     (debug "range-direction cursor")
+                     (.openCursor object-store range (core/name direction)))
+
+                   range
+                   (do
+                     (debug "range cursor")
+                     (.openCursor object-store range))
+
+                   :else
+                   (do
+                     (debug "default cursor")
+                     (.openCursor object-store)))]
+
+     (set! (.-onsuccess request)
+           (fn [_]
+             (if-let [js-cursor (.-result request)]
+               (callback (make-cursor-instance js-cursor))
+               (callback nil))))
+
+     (set! (.-onerror request)
+           (fn [_]
+             (let [error (.-error request)]
+               (throw error))))
+     instance))
+  
+  ([instance query callback]
+   (open-cursor instance query nil callback))
+  
+  ([instance callback]
+   (open-cursor instance nil callback)))
+
+(defn value-chan
+  ([instance query direction options]
+   (let [ch (chan)]
+     (open-cursor instance
+                  query
+                  direction
+                  (fn [cursor]
+                    (if cursor
+                      (try
+                        (let [v (csr/value cursor options)]
+                          (when (put! ch (databox/success v))
+                            (csr/continue cursor)))
+                        (catch :default ex
+                          (put! ch (databox/failure ex))
+                          (close! ch)))
+                      (close! ch))))
+     ch))
+  
+  ([instance query options]
+   (value-chan instance query nil options))
+  
+  ([instance options]
+   (value-chan instance nil options))
+  
+  ([instance]
+   (value-chan instance nil)))
 
 (defn open-key-cursor
-  [{:keys [object-store]} query direction]
-  {:pre [object-store (if direction (#{:next :nextunique :prev :prevunique} direction) true)]}
-  (let [ch (promise-chan)
-        range (resolve-key-range query)
-        request (cond
-                  (and range direction)
-                  (.openKeyCursor object-store range (core/name direction))
+  ([{:keys [object-store] :as instance} query direction callback]
+   {:pre [object-store (if direction (#{:next :nextunique :prev :prevunique} direction) true)]}
+   (let [range (resolve-key-range query)
+         request (cond
+                   (and range direction)
+                   (.openKeyCursor object-store range (core/name direction))
 
-                  range
-                  (.openKeyCursor object-store range)
+                   range
+                   (.openKeyCursor object-store range)
 
-                  :else
-                  (.openKeyCursor object-store))]
-    (setup-request-handlers request ch make-cursor-instance)
-    ch))
+                   :else
+                   (.openKeyCursor object-store))]
+
+     (set! (.-onsuccess request)
+           (fn [_]
+             (when-let [js-cursor (.-result request)]
+               (callback (make-cursor-instance js-cursor)))))
+
+     (set! (.-onerror request)
+           (fn [_]
+             (let [error (.-error request)]
+               (throw error))))
+     instance))
+  
+  ([instance query callback]
+   (open-key-cursor instance query nil callback))
+  
+  ([instance callback]
+   (open-key-cursor instance nil callback)))
 
 (defn put
   ([{:keys [object-store]} item key options]
@@ -211,12 +286,15 @@
    (let [ch (promise-chan)
          clj->js-options (select-keys options [:keyword-fn])
          js->clj-options (select-keys options [:keywordize-keys])
-         data    (apply clj->js item (flatten-map clj->js-options))
+         data    (lang/clj->js item clj->js-options)
          request (if (some? key)
                    (.put object-store data key)
                    (.put object-store data))]
-     (setup-request-handlers request ch #(apply js->clj % (flatten-map js->clj-options)))
+     (setup-request-handlers request ch #(lang/js->clj % js->clj-options))
      ch))
   
   ([instance item options]
-   (put instance item nil options)))
+   (put instance item nil options))
+  
+  ([instance item]
+   (put instance item nil)))

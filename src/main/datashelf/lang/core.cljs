@@ -1,5 +1,5 @@
 (ns datashelf.lang.core
-  (:refer-clojure :exclude [group-by])
+  (:refer-clojure :exclude [group-by js->clj clj->js])
   (:require [clojure.core :as core]
             [clojure.string :as string]))
 
@@ -73,3 +73,12 @@
 (defn flatten-map
   [m]
   (-> m seq flatten))
+
+(defn js->clj
+  [v & [options]]
+  (let [opts (if (some? (:keywordize-keys options)) options (assoc options :keywordize-keys true))]
+    (apply core/js->clj v (flatten-map opts))))
+
+(defn clj->js
+  [v & [options]]
+  (apply core/clj->js v (flatten-map options)))
