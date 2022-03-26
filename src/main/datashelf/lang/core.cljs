@@ -80,5 +80,8 @@
     (apply core/js->clj v (flatten-map opts))))
 
 (defn clj->js
-  [v & [options]]
-  (apply core/clj->js v (flatten-map options)))
+  [v & [{:keys [camelcasify-keys] :as options}]]
+  (let [preprocessed (cond-> v
+                       (and (map? v) camelcasify-keys)
+                       (map-keys #(-> % name to-camel-case)))]
+    (apply core/clj->js preprocessed (flatten-map (dissoc options :camelcasify-keys)))))

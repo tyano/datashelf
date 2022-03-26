@@ -41,7 +41,7 @@
   ([{:keys [object-store]} value key options]
    {:pre [object-store value (map? value)]}
    (let [ch (promise-chan)
-         data    (apply clj->js value (flatten-map options))
+         data    (lang/clj->js value options)
          request (if key
                    (.add object-store data key)
                    (.add object-store data))]
@@ -83,9 +83,7 @@
   [{:keys [object-store]} index-name key-path & [options]]
   {:pre [object-store index-name key-path]}
   (let [index-data (if options
-                     (let [js-opts (-> options
-                                       (keep-keys #(-> % core/name to-camel-case))
-                                       (clj->js))]
+                     (let [js-opts (lang/clj->js options {:camelcasify-keys true})]
                        (.createIndex object-store index-name key-path js-opts))
                      (.createIndex object-store index-name key-path))]
     (make-index-instance index-data)))
