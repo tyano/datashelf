@@ -79,9 +79,28 @@
   (let [opts (if (some? (:keywordize-keys options)) options (assoc options :keywordize-keys true))]
     (apply core/js->clj v (flatten-map opts))))
 
+(defn map-keys-recursive
+  [m f]
+  (letfn [(process-value
+            [v]
+            (cond
+              (map? v)
+              (map-keys-recursive v f)
+
+              (sequential? v)
+              (map (fn [sv] (process-value sv)) v)
+
+              :else
+              v))]
+    (persistent!
+     (reduce
+      (fn [m [k v]] (assoc! m (f k) (process-value v)))
+      (transient {})
+      m))))
+
 (defn clj->js
   [v & [{:keys [camelcasify-keys] :as options}]]
   (let [preprocessed (cond-> v
                        (and (map? v) camelcasify-keys)
-                       (map-keys #(-> % name to-camel-case)))]
+                       (map-keys-recursive #(-> % name to-camel-case)))]
     (apply core/clj->js preprocessed (flatten-map (dissoc options :camelcasify-keys)))))
