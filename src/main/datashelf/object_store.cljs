@@ -1,16 +1,16 @@
 (ns datashelf.object-store
   (:refer-clojure :exclude [count get name key])
   (:require [clojure.core :as core]
-            [clojure.core.async :refer [promise-chan chan put! close!]]
+            [clojure.core.async :refer [chan close! promise-chan put!]]
+            [databox.core :as databox]
             [datashelf.cursor :refer [make-cursor-instance] :as csr]
             [datashelf.key-range :refer [key-range?] :as key-range]
-            [datashelf.lang.core :refer [flatten-map keep-keys to-camel-case] :as lang]
+            [datashelf.lang.core :as lang]
             [datashelf.lang.string-list :refer [to-vector]]
+            [datashelf.object-store.instance :refer [make-index-instance]]
             [datashelf.request :refer [setup-request-handlers]]
             [datashelf.transaction :refer [make-transaction-instance]]
-            [datashelf.object-store.instance :refer [make-index-instance]]
-            [taoensso.timbre :refer-macros [debug] :as timbre]
-            [databox.core :as databox]))
+            [taoensso.timbre :refer-macros [debug] :as timbre]))
 
 (defn index-names
   [{:keys [object-store]}]
@@ -38,14 +38,22 @@
   (.-autoIncrement object-store))
 
 (defn add
-  ([{:keys [object-store]} value key options]
-   {:pre [object-store value (map? value)]}
+  ([{:keys [object-store]} value key {:keys [convert-value convert-result] :or {convert-value true convert-result true}}]
+   {:pre [object-store value value]}
    (let [ch (promise-chan)
-         data    (lang/clj->js value options)
+         data    (if convert-value
+                   (if (boolean? convert-value)
+                     (if (true? convert-value) (lang/clj->js value) value)
+                     (lang/clj->js value convert-value))
+                   value)
+         
          request (if key
                    (.add object-store data key)
                    (.add object-store data))]
-     (setup-request-handlers request ch)
+     (setup-request-handlers request ch (when convert-result
+                                          (if (boolean? convert-result)
+                                            (when (true? convert-result) lang/js->clj)
+                                            #(lang/js->clj % convert-result))))
      ch))
   
   ([object-store-instance value options]
@@ -102,29 +110,33 @@
   (.deleteIndex object-store index-name))
 
 (defn get
-  ([{:keys [object-store]} key options]
+  ([{:keys [object-store]} key {:keys [convert-result] :or {convert-result true}}]
    {:pre [object-store key]}
    (let [ch (promise-chan)
          request (.get object-store key)]
-     (setup-request-handlers request ch #(lang/js->clj % options))
+     (setup-request-handlers request ch (when convert-result (if (boolean? convert-result) 
+                                                               (when (true? convert-result) lang/js->clj) 
+                                                               #(lang/js->clj % convert-result))))
      ch))
   
   ([instance key]
    (get instance key nil)))
 
 (defn get-key
-  ([{:keys [object-store]} key options]
+  ([{:keys [object-store]} key {:keys [convert-result] :or {convert-result true}}]
    {:pre [object-store key]}
    (let [ch (promise-chan)
          request (.getKey object-store (resolve-key-range key))]
-     (setup-request-handlers request ch #(lang/js->clj % options))
+     (setup-request-handlers request ch (when convert-result (if (boolean? convert-result)
+                                                              (when (true? convert-result) lang/js->clj) 
+                                                               #(lang/js->clj % convert-result))))
      ch))
   
   ([instance key]
    (get-key instance key nil)))
 
 (defn get-all
-  ([{:keys [object-store]} query count options]
+  ([{:keys [object-store]} query count {:keys [convert-result] :or {convert-result true}}]
    {:pre [object-store  
           (if count (or (zero? count) (pos-int? count)) true)]}
    (let [ch (promise-chan)
@@ -138,7 +150,9 @@
                    
                    :else
                    (.getAll object-store))]
-     (setup-request-handlers request ch #(lang/js->clj % options))
+     (setup-request-handlers request ch (when convert-result (if (boolean? convert-result) 
+                                                               (when (true? convert-result) lang/js->clj) 
+                                                               #(lang/js->clj % convert-result))))
      ch))
   
   ([instance query options]
@@ -151,7 +165,7 @@
    (get-all instance nil)))
 
 (defn get-all-keys
-  ([{:keys [object-store]} query count options]
+  ([{:keys [object-store]} query count {:keys [convert-result] :or {convert-result true}}]
    {:pre [object-store 
           (if count (or (zero? count) (pos-int? count)) true)]}
    (let [ch (promise-chan)
@@ -165,7 +179,9 @@
                    
                    :else
                    (.getAllKeys object-store))]
-     (setup-request-handlers request ch #(lang/js->clj % options))
+     (setup-request-handlers request ch (when convert-result (if (boolean? convert-result)
+                                                               (when (true? convert-result) lang/js->clj)
+                                                               #(lang/js->clj % convert-result))))
      ch))
   
   ([instance query options]
@@ -279,20 +295,24 @@
    (open-key-cursor instance nil callback)))
 
 (defn put
-  ([{:keys [object-store]} item key options]
+  ([{:keys [object-store]} item key {:keys [convert-value convert-result] :or {convert-value true convert-result true}}]
    {:pre [object-store item]}
    (let [ch (promise-chan)
-         clj->js-options (select-keys options [:keyword-fn])
-         js->clj-options (select-keys options [:keywordize-keys])
-         data    (lang/clj->js item clj->js-options)
+         data    (if convert-value
+                   (if (boolean? convert-value)
+                     (if (true? convert-value) (lang/clj->js item) item)
+                     (lang/clj->js item convert-value))
+                   item)
          request (if (some? key)
                    (.put object-store data key)
                    (.put object-store data))]
-     (setup-request-handlers request ch #(lang/js->clj % js->clj-options))
+     (setup-request-handlers request ch (when convert-result (if (boolean? convert-result)
+                                                               (when (true? convert-result) lang/js->clj)
+                                                               #(lang/js->clj % convert-result))))
      ch))
-  
+
   ([instance item options]
    (put instance item nil options))
-  
+
   ([instance item]
    (put instance item nil)))

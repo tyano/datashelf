@@ -35,10 +35,14 @@
   (.-request cursor))
 
 (defn value
-  ([{:keys [cursor]} options]
+  ([{:keys [cursor]} {:keys [convert-result] :or [convert-result true]}]
    {:pre [cursor]}
    (let [v (.-value cursor)]
-     (lang/js->clj v options)))
+     (if convert-result
+       (if (boolean? convert-result)
+         (if (true? convert-result) (lang/js->clj v) v)
+         (lang/js->clj v convert-result))
+       v)))
   
   ([instance]
    (value instance nil)))
