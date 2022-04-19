@@ -35,7 +35,7 @@
   (.-request cursor))
 
 (defn value
-  ([{:keys [cursor]} {:keys [convert-result] :or [convert-result true]}]
+  ([{:keys [cursor]} {:keys [convert-result] :or {convert-result true}}]
    {:pre [cursor]}
    (let [v (.-value cursor)]
      (if convert-result

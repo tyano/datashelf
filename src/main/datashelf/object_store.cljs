@@ -4,10 +4,10 @@
             [clojure.core.async :refer [chan close! promise-chan put!]]
             [databox.core :as databox]
             [datashelf.cursor :refer [make-cursor-instance] :as csr]
-            [datashelf.key-range :refer [key-range?] :as key-range]
+            [datashelf.key-range :refer [resolve-key-range] :as key-range]
             [datashelf.lang.core :as lang]
             [datashelf.lang.string-list :refer [to-vector]]
-            [datashelf.object-store.instance :refer [make-index-instance]]
+            [datashelf.index :refer [make-index-instance]]
             [datashelf.request :refer [setup-request-handlers]]
             [datashelf.transaction :refer [make-transaction-instance]]
             [taoensso.timbre :refer-macros [debug] :as timbre]))
@@ -69,10 +69,6 @@
         request (.clear object-store)]
     (setup-request-handlers request ch)
     ch))
-
-(defn- resolve-key-range
-  [maybe-key-range]
-  (if (key-range? maybe-key-range) (key-range/to-js maybe-key-range) maybe-key-range))
 
 (defn count
   ([{:keys [object-store]} query]

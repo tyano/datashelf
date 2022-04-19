@@ -60,3 +60,7 @@
   [{:keys [key-range]}]
   {:keys [key-range]}
   (.-upperOpen key-range))
+
+(defn resolve-key-range
+  [maybe-key-range]
+  (if (key-range? maybe-key-range) (to-js maybe-key-range) maybe-key-range))
