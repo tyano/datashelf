@@ -70,19 +70,6 @@
     (setup-request-handlers request ch)
     ch))
 
-(defn count
-  ([{:keys [object-store]} query]
-   {:pre [object-store]}
-   (let [ch (promise-chan)
-         request (if-let [range (resolve-key-range query)]
-                   (.count object-store range)
-                   (.count object-store))]
-     (setup-request-handlers request ch)
-     ch))
-  
-  ([instance]
-   (count instance nil)))
-
 (defn create-index
   [{:keys [object-store]} index-name key-path & [options]]
   {:pre [object-store index-name key-path]}
@@ -91,6 +78,11 @@
                        (.createIndex object-store index-name key-path js-opts))
                      (.createIndex object-store index-name key-path))]
     (make-index-instance index-data)))
+
+(defn index
+  [{:keys [object-store]} index-name]
+  {:pre [object-store index-name]}
+  (make-index-instance (.index object-store index-name)))
 
 (defn delete
   [{:keys [object-store]} key]
@@ -104,191 +96,6 @@
   [{:keys [object-store]} index-name]
   {:pre [object-store index-name]}
   (.deleteIndex object-store index-name))
-
-(defn get
-  ([{:keys [object-store]} key {:keys [convert-result] :or {convert-result true}}]
-   {:pre [object-store key]}
-   (let [ch (promise-chan)
-         request (.get object-store key)]
-     (setup-request-handlers request ch (when convert-result (if (boolean? convert-result) 
-                                                               (when (true? convert-result) lang/js->clj) 
-                                                               #(lang/js->clj % convert-result))))
-     ch))
-  
-  ([instance key]
-   (get instance key nil)))
-
-(defn get-key
-  ([{:keys [object-store]} key {:keys [convert-result] :or {convert-result true}}]
-   {:pre [object-store key]}
-   (let [ch (promise-chan)
-         request (.getKey object-store (resolve-key-range key))]
-     (setup-request-handlers request ch (when convert-result (if (boolean? convert-result)
-                                                              (when (true? convert-result) lang/js->clj) 
-                                                               #(lang/js->clj % convert-result))))
-     ch))
-  
-  ([instance key]
-   (get-key instance key nil)))
-
-(defn get-all
-  ([{:keys [object-store]} query count {:keys [convert-result] :or {convert-result true}}]
-   {:pre [object-store  
-          (if count (or (zero? count) (pos-int? count)) true)]}
-   (let [ch (promise-chan)
-         range   (resolve-key-range query)
-         request (cond
-                   (and range count)
-                   (.getAll object-store range count)
-                   
-                   range
-                   (.getAll object-store range)
-                   
-                   :else
-                   (.getAll object-store))]
-     (setup-request-handlers request ch (when convert-result (if (boolean? convert-result) 
-                                                               (when (true? convert-result) lang/js->clj) 
-                                                               #(lang/js->clj % convert-result))))
-     ch))
-  
-  ([instance query options]
-   (get-all instance query nil options))
-  
-  ([instance options]
-   (get-all instance nil options))
-  
-  ([instance]
-   (get-all instance nil)))
-
-(defn get-all-keys
-  ([{:keys [object-store]} query count {:keys [convert-result] :or {convert-result true}}]
-   {:pre [object-store 
-          (if count (or (zero? count) (pos-int? count)) true)]}
-   (let [ch (promise-chan)
-         range   (resolve-key-range query)
-         request (cond
-                   (and range count)
-                   (.getAllKeys object-store range count)
-                   
-                   range
-                   (.getAllKeys object-store range)
-                   
-                   :else
-                   (.getAllKeys object-store))]
-     (setup-request-handlers request ch (when convert-result (if (boolean? convert-result)
-                                                               (when (true? convert-result) lang/js->clj)
-                                                               #(lang/js->clj % convert-result))))
-     ch))
-  
-  ([instance query options]
-   (get-all-keys instance query nil options))
-  
-  ([instance options]
-   (get-all-keys instance nil options))
-  
-  ([instance]
-   (get-all-keys instance nil)))
-
-(defn index
-  [{:keys [object-store]} index-name]
-  {:pre [object-store index-name]}
-  (make-index-instance (.index object-store index-name)))
-
-(defn open-cursor  
-  ([{:keys [object-store] :as instance} query direction callback]
-   {:pre [object-store (if direction (#{:next :nextunique :prev :prevunique} direction) true)]}
-   (let [range (resolve-key-range query)
-         request (cond
-                   (and range direction)
-                   (do
-                     (debug "range-direction cursor")
-                     (.openCursor object-store range (core/name direction)))
-
-                   range
-                   (do
-                     (debug "range cursor")
-                     (.openCursor object-store range))
-
-                   :else
-                   (do
-                     (debug "default cursor")
-                     (.openCursor object-store)))]
-
-     (set! (.-onsuccess request)
-           (fn [_]
-             (if-let [js-cursor (.-result request)]
-               (callback (make-cursor-instance js-cursor))
-               (callback nil))))
-
-     (set! (.-onerror request)
-           (fn [_]
-             (let [error (.-error request)]
-               (throw error))))
-     instance))
-  
-  ([instance query callback]
-   (open-cursor instance query nil callback))
-  
-  ([instance callback]
-   (open-cursor instance nil callback)))
-
-(defn value-chan
-  ([instance query direction options]
-   (let [ch (chan)]
-     (open-cursor instance
-                  query
-                  direction
-                  (fn [cursor]
-                    (if cursor
-                      (try
-                        (let [v (csr/value cursor options)]
-                          (when (put! ch (databox/success v))
-                            (csr/continue cursor)))
-                        (catch :default ex
-                          (put! ch (databox/failure ex))
-                          (close! ch)))
-                      (close! ch))))
-     ch))
-  
-  ([instance query options]
-   (value-chan instance query nil options))
-  
-  ([instance options]
-   (value-chan instance nil options))
-  
-  ([instance]
-   (value-chan instance nil)))
-
-(defn open-key-cursor
-  ([{:keys [object-store] :as instance} query direction callback]
-   {:pre [object-store (if direction (#{:next :nextunique :prev :prevunique} direction) true)]}
-   (let [range (resolve-key-range query)
-         request (cond
-                   (and range direction)
-                   (.openKeyCursor object-store range (core/name direction))
-
-                   range
-                   (.openKeyCursor object-store range)
-
-                   :else
-                   (.openKeyCursor object-store))]
-
-     (set! (.-onsuccess request)
-           (fn [_]
-             (when-let [js-cursor (.-result request)]
-               (callback (make-cursor-instance js-cursor)))))
-
-     (set! (.-onerror request)
-           (fn [_]
-             (let [error (.-error request)]
-               (throw error))))
-     instance))
-  
-  ([instance query callback]
-   (open-key-cursor instance query nil callback))
-  
-  ([instance callback]
-   (open-key-cursor instance nil callback)))
 
 (defn put
   ([{:keys [object-store]} item key {:keys [convert-value convert-result] :or {convert-value true convert-result true}}]
