@@ -9,5 +9,5 @@
 
   :dependencies
   [[thheller/shadow-cljs "2.17.3"]
-   [databox "0.2.0-SNAPSHOT"]
+   [databox "0.2.0"]
    [com.taoensso/timbre "5.1.2"]])
