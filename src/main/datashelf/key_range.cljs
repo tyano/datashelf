@@ -4,7 +4,8 @@
 
 (defn make-key-range-instance
   [key-range]
-  (->KeyRange key-range))
+  (when key-range
+    (->KeyRange key-range)))
 
 (defn key-range?
   [maybe-key-range]

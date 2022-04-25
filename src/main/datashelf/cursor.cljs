@@ -6,7 +6,8 @@
 
 (defn make-cursor-instance
   [js-cursor]
-  {:cursor js-cursor})
+  (when js-cursor
+    {:cursor js-cursor}))
 
 (defn source
   [{:keys [cursor]}]

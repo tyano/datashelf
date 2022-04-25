@@ -2,4 +2,4 @@
 
 (defn make-db-instance
   [js-db]
-  {:db js-db})
+  (when js-db {:db js-db}))

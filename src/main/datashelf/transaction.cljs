@@ -5,7 +5,7 @@
 
 (defn make-transaction-instance
   [js-tx]
-  {:transaction js-tx})
+  (when js-tx {:transaction js-tx}))
 
 (defn db
   [{:keys [transaction]}]
