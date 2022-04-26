@@ -3,32 +3,6 @@
   (:require [clojure.core :as core]
             [clojure.string :as string]))
 
-(defn group-by
-  ([key-fn val-fn coll]
-   (persistent!
-    (reduce
-     (fn [m v]
-       (let [group-key (key-fn v)
-             value     (val-fn v)]
-         (assoc! m group-key (conj (get m group-key []) value))))
-     (transient {})
-     coll)))
-  
-  ([key-fn coll]
-   (core/group-by key-fn coll)))
-
-(defn select-by-ns
-  [m ns-value]
-  (let [ns-name (name ns-value)]
-    (persistent!
-     (reduce
-      (fn [m [k v]]
-        (if (= ns-name (namespace k))
-          (assoc! m k v)
-          m))
-      (transient {})
-      m))))
-
 (defn map-keys
   [m f]
   (persistent!
@@ -48,36 +22,33 @@
     (transient {})
     m)))
 
-(defn remove-ns-part
-  [v]
-  {:pre [(keyword? v)]}
-  (let [n (name v)]
-    (keyword n)))
-
-(defn blank?
-  [str]
-  (if str
-    (string/blank? (string/replace str "　" ""))
-    true))
-
-(defn collection?
-  [data]
-  (and (coll? data) (not (map? data))))
-
 (defn to-camel-case
   [value]
   (when value
     (let [[head & others] (string/split value "-")]
       (string/join (cons head (map string/capitalize others))))))
 
+(def ^:private upper-chars #{\A \B \C \D \E \F \G \H \I \J \K \L \M \N \O \P \Q \R \S \T \U \V \W \X \Y \Z})
+
+(defn- upper?
+  [c]
+  (boolean (upper-chars c)))
+
+(defn to-kebab-case
+  [value]
+  (when value
+    (->> (reduce
+          (fn [result c]
+            (if (upper? (char c))
+              (str result "-" c)
+              (str result c)))
+          ""
+          (seq value))
+         (string/lower-case))))
+
 (defn flatten-map
   [m]
   (-> m seq flatten))
-
-(defn js->clj
-  [v & [options]]
-  (let [opts (if (some? (:keywordize-keys options)) options (assoc options :keywordize-keys true))]
-    (apply core/js->clj v (flatten-map opts))))
 
 (defn map-keys-recursive
   [m f]
@@ -88,7 +59,7 @@
               (map-keys-recursive v f)
 
               (sequential? v)
-              (map (fn [sv] (process-value sv)) v)
+              (map process-value v)
 
               :else
               v))]
@@ -98,9 +69,60 @@
       (transient {})
       m))))
 
+(def ^:dynamic *default-js->clj-options* {:kebabcasify-keys true :keywordize-keys true})
+
+(defn set-default-js->clj-options!
+  [options]
+  (set! *default-js->clj-options* options))
+
+(defn js->clj
+  [v & [options]]
+  (let [{:keys [kebabcasify-keys keywordize-keys] :as options} (merge *default-js->clj-options* options)]
+    (letfn [(postprocess-key
+              [k]
+              (let [keyname (if kebabcasify-keys
+                              (-> k name to-kebab-case)
+                              (-> k name))]
+                (if keywordize-keys
+                  (keyword keyname)
+                  keyname)))
+
+            (postprocess
+              [v]
+              (cond
+                (map? v)
+                (map-keys-recursive v postprocess-key)
+
+                (sequential? v)
+                (map postprocess v)
+
+                :else
+                v))]
+
+      (let [converted (apply core/js->clj v (flatten-map (dissoc options :kebabcasify-keys :keywordize-keys)))]
+        (postprocess converted)))))
+
+
+
+(def ^:dynamic *default-clj->js-options* {:camelcasify-keys true})
+
+(defn set-default-clj->js-options!
+  [options]
+  (set! *default-clj->js-options* options))
+
 (defn clj->js
-  [v & [{:keys [camelcasify-keys] :as options}]]
-  (let [preprocessed (cond-> v
-                       (and (map? v) camelcasify-keys)
-                       (map-keys-recursive #(-> % name to-camel-case)))]
-    (apply core/clj->js preprocessed (flatten-map (dissoc options :camelcasify-keys)))))
+  [v & [options]]
+  (let [{:keys [camelcasify-keys] :as options} (merge *default-clj->js-options* options)]
+    (letfn [(preprocess
+              [v]
+              (cond
+                (and (map? v) camelcasify-keys)
+                (map-keys-recursive v #(-> % name to-camel-case))
+
+                (and (sequential? v) camelcasify-keys)
+                (map preprocess v)
+
+                :else
+                v))]
+      (let [preprocessed (preprocess v)]
+        (apply core/clj->js preprocessed (flatten-map (dissoc options :camelcasify-keys)))))))
