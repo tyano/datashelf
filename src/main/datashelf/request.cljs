@@ -1,6 +1,8 @@
 (ns datashelf.request
+  (:refer-clojure :exclude [clj->js js->clj])
   (:require [clojure.core.async :refer [>! close! go]]
-            [databox.core :as databox]))
+            [databox.core :as databox]
+            [datashelf.lang.core :refer [clj->js js->clj]]))
 
 (defn setup-request-handlers
   [request ch & [result-fn]]
@@ -30,7 +32,8 @@
 
 (defn result-converter
   [convert-options]
-  (when convert-options
+  (if convert-options
     (if (boolean? convert-options)
-      (when (true? convert-options) js->clj)
-      #(js->clj % convert-options))))
+      (if (true? convert-options) js->clj identity)
+      #(js->clj % convert-options))
+    identity))

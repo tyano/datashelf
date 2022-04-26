@@ -1,12 +1,11 @@
 (ns datashelf.query
   (:refer-clojure :exclude [count get name key])
   (:require [clojure.core :as core]
-            [clojure.core.async :refer [>! close! go promise-chan chan put!]]
+            [clojure.core.async :refer [>! chan close! go promise-chan put!]]
             [databox.core :as databox]
             [datashelf.cursor :refer [make-cursor-instance] :as csr]
             [datashelf.key-range :refer [key-range? resolve-key-range] :as key-range]
-            [datashelf.lang.core :as lang]
-            [datashelf.request :refer [setup-request-handlers]]
+            [datashelf.request :refer [result-converter setup-request-handlers]]
             [taoensso.timbre :refer-macros [debug] :as timbre]))
 
 (defprotocol Queriable
@@ -31,28 +30,24 @@
    (count instance nil)))
 
 (defn get
-  ([instance key {:keys [convert-result] :or {convert-result true}}]
+  ([instance key {convert-result-opts :convert-result :or {convert-result-opts true}}]
    {:pre [(queriable? instance) (some? (js-instance instance)) key]}
    (let [js-obj (js-instance instance)
          ch (promise-chan)
          request (.get js-obj key)]
-     (setup-request-handlers request ch (when convert-result (if (boolean? convert-result)
-                                                               (when (true? convert-result) lang/js->clj)
-                                                               #(lang/js->clj % convert-result))))
+     (setup-request-handlers request ch (result-converter convert-result-opts))
      ch))
 
   ([instance key]
    (get instance key nil)))
 
 (defn get-key
-  ([instance key {:keys [convert-result] :or {convert-result true}}]
+  ([instance key {convert-result-opts :convert-result :or {convert-result-opts true}}]
    {:pre [(queriable? instance) (some? (js-instance instance)) key]}
    (let [js-obj (js-instance instance)
          ch (promise-chan)
          request (.getKey js-obj (resolve-key-range key))]
-     (setup-request-handlers request ch (when convert-result (if (boolean? convert-result)
-                                                               (when (true? convert-result) lang/js->clj)
-                                                               #(lang/js->clj % convert-result))))
+     (setup-request-handlers request ch (result-converter convert-result-opts))
      ch))
 
   ([instance key]
@@ -60,7 +55,7 @@
 
 
 (defn get-all
-  ([instance query count {:keys [convert-result] :or {convert-result true}}]
+  ([instance query count {convert-result-opts :convert-result :or {convert-result-opts true}}]
    {:pre [(queriable? instance) (some? (js-instance instance))
           (if count (or (zero? count) (pos-int? count)) true)]}
    (let [js-obj (js-instance instance)
@@ -75,9 +70,7 @@
 
                    :else
                    (.getAll js-obj))]
-     (setup-request-handlers request ch (when convert-result (if (boolean? convert-result)
-                                                               (when (true? convert-result) lang/js->clj)
-                                                               #(lang/js->clj % convert-result))))
+     (setup-request-handlers request ch (result-converter convert-result-opts))
      ch))
 
   ([instance query options]
@@ -91,7 +84,7 @@
 
 
 (defn get-all-keys
-  ([instance query count {:keys [convert-result] :or {convert-result true}}]
+  ([instance query count {convert-result-opts :convert-result :or {convert-result-opts true}}]
    {:pre [(queriable? instance) (some? (js-instance instance))
           (if count (or (zero? count) (pos-int? count)) true)]}
    (let [js-obj (js-instance instance)
@@ -106,9 +99,7 @@
 
                    :else
                    (.getAllKeys js-obj))]
-     (setup-request-handlers request ch (when convert-result (if (boolean? convert-result)
-                                                               (when (true? convert-result) lang/js->clj)
-                                                               #(lang/js->clj % convert-result))))
+     (setup-request-handlers request ch (result-converter convert-result-opts))
      ch))
 
   ([instance query options]

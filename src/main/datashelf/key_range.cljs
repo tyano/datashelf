@@ -1,6 +1,5 @@
 (ns datashelf.key-range
-  (:require [datashelf.lang.core :as lang]
-            [datashelf.request :as req]))
+  (:require [datashelf.request :as req]))
 
 (defrecord KeyRange [key-range])
 

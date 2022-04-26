@@ -5,7 +5,7 @@
             [datashelf.key-range :refer [resolve-key-range] :as key-range]
             [datashelf.lang.core :as lang]
             [datashelf.lang.string-list :refer [to-vector]]
-            [datashelf.request :refer [setup-request-handlers]]
+            [datashelf.request :refer [setup-request-handlers convert-value result-converter]]
             [datashelf.transaction :refer [make-transaction-instance]]))
 
 (defn index-names
@@ -34,22 +34,14 @@
   (.-autoIncrement object-store))
 
 (defn add
-  ([{:keys [object-store]} value key {:keys [convert-value convert-result] :or {convert-value true convert-result true}}]
+  ([{:keys [object-store]} value key {convert-value-opts :convert-value convert-result-opts :convert-result :or {convert-value-opts true convert-result-opts true}}]
    {:pre [object-store value value]}
    (let [ch (promise-chan)
-         data    (if convert-value
-                   (if (boolean? convert-value)
-                     (if (true? convert-value) (lang/clj->js value) value)
-                     (lang/clj->js value convert-value))
-                   value)
-         
+         data    (convert-value value convert-value-opts)
          request (if key
                    (.add object-store data key)
                    (.add object-store data))]
-     (setup-request-handlers request ch (when convert-result
-                                          (if (boolean? convert-result)
-                                            (when (true? convert-result) lang/js->clj)
-                                            #(lang/js->clj % convert-result))))
+     (setup-request-handlers request ch (result-converter convert-result-opts))
      ch))
   
   ([object-store-instance value options]
@@ -94,20 +86,14 @@
   (.deleteIndex object-store index-name))
 
 (defn put
-  ([{:keys [object-store]} item key {:keys [convert-value convert-result] :or {convert-value true convert-result true}}]
+  ([{:keys [object-store]} item key {convert-value-opts :convert-value convert-result-opts :convert-result :or {convert-value-opts true convert-result-opts true}}]
    {:pre [object-store item]}
    (let [ch (promise-chan)
-         data    (if convert-value
-                   (if (boolean? convert-value)
-                     (if (true? convert-value) (lang/clj->js item) item)
-                     (lang/clj->js item convert-value))
-                   item)
+         data    (convert-value item convert-value-opts)
          request (if (some? key)
                    (.put object-store data key)
                    (.put object-store data))]
-     (setup-request-handlers request ch (when convert-result (if (boolean? convert-result)
-                                                               (when (true? convert-result) lang/js->clj)
-                                                               #(lang/js->clj % convert-result))))
+     (setup-request-handlers request ch (result-converter convert-result-opts))
      ch))
 
   ([instance item options]

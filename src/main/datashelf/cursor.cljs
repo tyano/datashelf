@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [update key])
   (:require [clojure.core.async :refer [promise-chan]]
             [datashelf.lang.core :as lang]
-            [datashelf.request :refer [setup-request-handlers]]))
+            [datashelf.request :refer [setup-request-handlers result-converter]]))
 
 (defn make-cursor-instance
   [js-cursor]
@@ -36,14 +36,11 @@
   (.-request cursor))
 
 (defn value
-  ([{:keys [cursor]} {:keys [convert-result] :or {convert-result true}}]
+  ([{:keys [cursor]} {convert-result-opts :convert-result :or {convert-result-opts true}}]
    {:pre [cursor]}
-   (let [v (.-value cursor)]
-     (if convert-result
-       (if (boolean? convert-result)
-         (if (true? convert-result) (lang/js->clj v) v)
-         (lang/js->clj v convert-result))
-       v)))
+   (let [v (.-value cursor)
+         converter-fn (result-converter convert-result-opts)]
+     (converter-fn v)))
   
   ([instance]
    (value instance nil)))
