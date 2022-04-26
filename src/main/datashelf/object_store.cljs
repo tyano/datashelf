@@ -1,16 +1,12 @@
 (ns datashelf.object-store
   (:refer-clojure :exclude [count get name key])
-  (:require [clojure.core :as core]
-            [clojure.core.async :refer [chan close! promise-chan put!]]
-            [databox.core :as databox]
-            [datashelf.cursor :refer [make-cursor-instance] :as csr]
+  (:require [clojure.core.async :refer [promise-chan]]
+            [datashelf.index :refer [make-index-instance]]
             [datashelf.key-range :refer [resolve-key-range] :as key-range]
             [datashelf.lang.core :as lang]
             [datashelf.lang.string-list :refer [to-vector]]
-            [datashelf.index :refer [make-index-instance]]
             [datashelf.request :refer [setup-request-handlers]]
-            [datashelf.transaction :refer [make-transaction-instance]]
-            [taoensso.timbre :refer-macros [debug] :as timbre]))
+            [datashelf.transaction :refer [make-transaction-instance]]))
 
 (defn index-names
   [{:keys [object-store]}]
