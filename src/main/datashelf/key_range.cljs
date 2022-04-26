@@ -1,4 +1,6 @@
-(ns datashelf.key-range)
+(ns datashelf.key-range
+  (:require [datashelf.lang.core :as lang]
+            [datashelf.request :as req]))
 
 (defrecord KeyRange [key-range])
 
@@ -17,30 +19,47 @@
   key-range)
 
 (defn lower-bound
+  ([lower open {convert-value-opts :convert-value :or {convert-value-opts true}}]
+   {:pre [lower (boolean? open)]}
+   (let [lower (req/convert-value lower convert-value-opts)]
+     (make-key-range-instance (js/IDBKeyRange.lowerBound lower open))))
   ([lower open]
-   (make-key-range-instance (js/IDBKeyRange.lowerBound lower open)))
+   (lower-bound lower open nil))
   ([lower]
-   (make-key-range-instance (js/IDBKeyRange.lowerBound lower))))
+   (lower-bound lower false)))
 
 (defn upper-bound
+  ([upper open {convert-value-opts :convert-value :or {convert-value-opts true}}]
+   (let [upper (req/convert-value upper convert-value-opts)]
+     (make-key-range-instance (js/IDBKeyRange.upperBound upper open))))
   ([upper open]
-   (make-key-range-instance (js/IDBKeyRange.upperBound upper open)))
+   (upper-bound upper open nil))
   ([upper]
-   (make-key-range-instance (js/IDBKeyRange.upperBound upper))))
+   (upper-bound upper false)))
 
 (defn only
-  [value]
-  (make-key-range-instance (js/IDBKeyRange.only value)))
+  ([value {convert-value-opts :convert-value :or {convert-value-opts true}}]
+   {:pre [value]}
+   (let [value (req/convert-value value convert-value-opts)]
+     (make-key-range-instance (js/IDBKeyRange.only value))))
+  ([value]
+   (only value nil)))
 
 (defn bound
-  ([lower upper lowerOpen upperOpen]
-   (make-key-range-instance (js/IDBKeyRange.bound lower upper lowerOpen upperOpen)))
+  ([lower upper lower-open upper-open {convert-value-opts :convert-value :or {convert-value-opts true}}]
+   {:pre [lower upper (boolean? lower-open) (boolean? upper-open)]}
+   (let [lower (req/convert-value lower convert-value-opts)
+         upper (req/convert-value upper convert-value-opts)]
+     (make-key-range-instance (js/IDBKeyRange.bound lower upper lower-open upper-open))))
   
-  ([lower upper lowerOpen]
-   (make-key-range-instance (js/IDBKeyRange.bound lower upper lowerOpen)))
+  ([lower upper lower-open upper-open]
+   (bound lower upper lower-open upper-open nil))
+  
+  ([lower upper lower-open]
+   (bound lower upper lower-open false))
   
   ([lower upper]
-   (make-key-range-instance (js/IDBKeyRange.bound lower upper))))
+   (bound lower upper false)))
 
 (defn lower
   [{:keys [key-range]}]

@@ -18,3 +18,19 @@
             (go
               (>! ch (databox/failure error))
               (close! ch))))))
+
+
+(defn convert-value
+  [v convert-options]
+  (if convert-options
+    (if (boolean? convert-options)
+      (if (true? convert-options) (clj->js v) v)
+      (clj->js v convert-options))
+    v))
+
+(defn result-converter
+  [convert-options]
+  (when convert-options
+    (if (boolean? convert-options)
+      (when (true? convert-options) js->clj)
+      #(js->clj % convert-options))))
