@@ -1,8 +1,6 @@
 (ns datashelf.cursor
   (:refer-clojure :exclude [update key])
-  (:require [clojure.core.async :refer [promise-chan]]
-            [datashelf.lang.core :as lang]
-            [datashelf.request :refer [setup-request-handlers result-converter]]))
+  (:require [datashelf.request :refer [convert-value result-converter]]))
 
 (defn make-cursor-instance
   [js-cursor]
@@ -75,10 +73,23 @@
   instance)
 
 (defn update
-  [{:keys [cursor]} value options]
-  {:pre [cursor]}
-  (let [ch (promise-chan)
-        data    (lang/clj->js value options)
-        request (.update cursor data)]
-    (setup-request-handlers request ch)
-    ch))
+  ([{:keys [cursor]} value {:keys [success-fn error-fn] convert-value-opts :convert-value convert-result-opts :convert-result :or {convert-value-opts true convert-result-opts true}}]
+   {:pre [cursor]}
+   (let [data    (convert-value value convert-value-opts)
+         request (.update cursor data)]
+
+     (set! (.-onsuccess request)
+           (fn [_]
+             (when success-fn
+               (let [result-fn (result-converter convert-result-opts)
+                     result (result-fn (.-result request))]
+                 (success-fn result)))))
+
+     (set! (.-onerror request)
+           (fn [_]
+             (when error-fn
+               (let [error (.-error request)]
+                 (error-fn error)))))
+
+     
+     )))
