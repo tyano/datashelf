@@ -5,7 +5,7 @@
             [databox.core :as databox]
             [datashelf.cursor :refer [make-cursor-instance] :as csr]
             [datashelf.key-range :refer [key-range? resolve-key-range] :as key-range]
-            [datashelf.request :refer [result-converter setup-request-handlers]]
+            [datashelf.request :refer [convert-value result-converter setup-request-handlers]]
             [taoensso.timbre :refer-macros [debug] :as timbre]))
 
 (defprotocol Queriable
@@ -16,25 +16,28 @@
   (satisfies? Queriable obj))
 
 (defn count
-  ([instance query]
+  ([instance query {convert-value-opts :convert-value :or {convert-value-opts true}}]
    {:pre [(queriable? instance) (some? (js-instance instance))]}
    (let [js-obj (js-instance instance)
          ch (promise-chan)
-         request (if-let [range (resolve-key-range query)]
+         request (if-let [range (resolve-key-range query convert-value-opts)]
                    (.count js-obj range)
                    (.count js-obj))]
      (setup-request-handlers request ch)
      ch))
+  
+  ([instance query]
+   (count instance query nil))
 
   ([instance]
    (count instance nil)))
 
 (defn get
-  ([instance key {convert-result-opts :convert-result :or {convert-result-opts true}}]
+  ([instance key {:keys [output-chan] convert-value-opts :convert-value convert-result-opts :convert-result :or {convert-value-opts true convert-result-opts true}}]
    {:pre [(queriable? instance) (some? (js-instance instance)) key]}
-   (let [js-obj (js-instance instance)
-         ch (promise-chan)
-         request (.get js-obj key)]
+   (let [js-obj  (js-instance instance)
+         ch      (or output-chan (promise-chan))
+         request (.get js-obj (resolve-key-range key convert-value-opts))]
      (setup-request-handlers request ch (result-converter convert-result-opts))
      ch))
 
@@ -42,11 +45,11 @@
    (get instance key nil)))
 
 (defn get-key
-  ([instance key {convert-result-opts :convert-result :or {convert-result-opts true}}]
+  ([instance key {:keys [output-chan] convert-value-opts :convert-value convert-result-opts :convert-result :or {convert-value-opts true convert-result-opts true}}]
    {:pre [(queriable? instance) (some? (js-instance instance)) key]}
-   (let [js-obj (js-instance instance)
-         ch (promise-chan)
-         request (.getKey js-obj (resolve-key-range key))]
+   (let [js-obj  (js-instance instance)
+         ch      (or output-chan (promise-chan))
+         request (.getKey js-obj (resolve-key-range key convert-value-opts))]
      (setup-request-handlers request ch (result-converter convert-result-opts))
      ch))
 
@@ -55,12 +58,12 @@
 
 
 (defn get-all
-  ([instance query count {convert-result-opts :convert-result :or {convert-result-opts true}}]
+  ([instance query count {:keys [output-chan] convert-value-opts :convert-value convert-result-opts :convert-result :or {convert-value-opts true convert-result-opts true}}]
    {:pre [(queriable? instance) (some? (js-instance instance))
           (if count (or (zero? count) (pos-int? count)) true)]}
-   (let [js-obj (js-instance instance)
-         ch (promise-chan)
-         range   (resolve-key-range query)
+   (let [js-obj  (js-instance instance)
+         ch      (or output-chan (promise-chan))
+         range   (resolve-key-range query convert-value-opts)
          request (cond
                    (and range count)
                    (.getAll js-obj range count)
@@ -84,12 +87,12 @@
 
 
 (defn get-all-keys
-  ([instance query count {convert-result-opts :convert-result :or {convert-result-opts true}}]
+  ([instance query count {:keys [output-chan] convert-value-opts :convert-value convert-result-opts :convert-result :or {convert-value-opts true convert-result-opts true}}]
    {:pre [(queriable? instance) (some? (js-instance instance))
           (if count (or (zero? count) (pos-int? count)) true)]}
-   (let [js-obj (js-instance instance)
-         ch (promise-chan)
-         range   (resolve-key-range query)
+   (let [js-obj  (js-instance instance)
+         ch      (or output-chan (promise-chan))
+         range   (resolve-key-range query convert-value-opts)
          request (cond
                    (and range count)
                    (.getAllKeys js-obj range count)
@@ -112,13 +115,13 @@
    (get-all-keys instance nil)))
 
 (defn open-cursor
-  ([instance range direction callback]
+  ([instance range direction callback {:keys [output-chan] convert-value-opts :convert-value :or {convert-value-opts true}}]
    {:pre [(queriable? instance) (some? (js-instance instance))
           (key-range? range)
           (if direction (#{:next :nextunique :prev :prevunique} direction) true)]}
-   (let [js-obj (js-instance instance)
-         result-ch (promise-chan)
-         range     (resolve-key-range range)
+   (let [js-obj    (js-instance instance)
+         result-ch (or output-chan (promise-chan))
+         range     (resolve-key-range range convert-value-opts)
          request   (cond
                      (and range direction)
                      (do
@@ -157,17 +160,21 @@
                (go
                  (>! result-ch (databox/failure error))
                  (close! result-ch)))))
+     
      result-ch))
+  
+  ([instance query callback options]
+   (open-cursor instance query nil callback options))
 
   ([instance query callback]
-   (open-cursor instance query nil callback))
+   (open-cursor instance query nil callback nil))
 
   ([instance callback]
    (open-cursor instance nil callback)))
 
 (defn value-chan
-  ([instance query direction options]
-   (let [ch (chan)]
+  ([instance query direction {:keys [output-chan] :as options}]
+   (let [ch (or output-chan (chan))]
      (open-cursor instance
                   query
                   direction
@@ -193,34 +200,52 @@
    (value-chan instance nil)))
 
 (defn open-key-cursor
-  ([instance query direction callback]
+  ([instance query direction callback {:keys [output-chan] convert-value-opts :convert-value :or {convert-value-opts true}}]
    {:pre [(queriable? instance) (some? (js-instance instance))
           (if direction (#{:next :nextunique :prev :prevunique} direction) true)]}
-   (let [js-obj (js-instance instance)
-         range (resolve-key-range query)
-         request (cond
-                   (and range direction)
-                   (.openKeyCursor js-obj range (core/name direction))
+   (let [js-obj    (js-instance instance)
+         result-ch (or output-chan (promise-chan))
+         range     (resolve-key-range query convert-value-opts)
+         request   (cond
+                     (and range direction)
+                     (.openKeyCursor js-obj range (core/name direction))
 
-                   range
-                   (.openKeyCursor js-obj range)
+                     range
+                     (.openKeyCursor js-obj range)
 
-                   :else
-                   (.openKeyCursor js-obj))]
+                     :else
+                     (.openKeyCursor js-obj))]
 
      (set! (.-onsuccess request)
            (fn [_]
-             (when-let [js-cursor (.-result request)]
-               (callback (make-cursor-instance js-cursor)))))
+             (try
+               (let [cursor (if-let [js-cursor (.-result request)]
+                              (callback (make-cursor-instance js-cursor))
+                              (callback nil))]
+                 (if cursor
+                   (csr/continue cursor)
+                   (go
+                     (>! result-ch (databox/success nil))
+                     (close! result-ch))))
+               (catch :default ex
+                 (go
+                   (>! result-ch (databox/failure ex))
+                   (close! result-ch))))))
 
      (set! (.-onerror request)
            (fn [_]
              (let [error (.-error request)]
-               (throw error))))
-     instance))
+               (go
+                 (>! result-ch (databox/failure error))
+                 (close! result-ch)))))
+     
+     result-ch))
 
+  ([instance query callback options]
+   (open-key-cursor instance query nil callback options))
+  
   ([instance query callback]
-   (open-key-cursor instance query nil callback))
+   (open-key-cursor instance query nil callback nil))
 
   ([instance callback]
    (open-key-cursor instance nil callback)))

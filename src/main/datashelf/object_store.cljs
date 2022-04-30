@@ -34,9 +34,9 @@
   (.-autoIncrement object-store))
 
 (defn add
-  ([{:keys [object-store]} value key {convert-value-opts :convert-value convert-result-opts :convert-result :or {convert-value-opts true convert-result-opts true}}]
+  ([{:keys [object-store]} value key {output-chan :output-chan convert-value-opts :convert-value convert-result-opts :convert-result :or {convert-value-opts true convert-result-opts true}}]
    {:pre [object-store value value]}
-   (let [ch (promise-chan)
+   (let [ch      (or output-chan (promise-chan))
          data    (convert-value value convert-value-opts)
          request (if key
                    (.add object-store data key)
@@ -51,12 +51,14 @@
    (add object-store-instance value nil)))
 
 (defn clear
-  [{:keys [object-store]}]
-  {:pre [object-store]}
-  (let [ch (promise-chan)
-        request (.clear object-store)]
-    (setup-request-handlers request ch)
-    ch))
+  ([{:keys [object-store]} {:keys [output-chan]}]
+   {:pre [object-store]}
+   (let [ch      (or output-chan (promise-chan))
+         request (.clear object-store)]
+     (setup-request-handlers request ch)
+     ch))
+  ([object-store-instance]
+   (clear object-store-instance nil)))
 
 (defn create-index
   [{:keys [object-store]} index-name key-path & [options]]
@@ -73,12 +75,14 @@
   (make-index-instance (.index object-store index-name)))
 
 (defn delete
-  [{:keys [object-store]} key]
-  {:pre [object-store key]}
-  (let [ch (promise-chan)
-        request (.delete object-store (resolve-key-range key))]
-    (setup-request-handlers request ch)
-    ch))
+  ([{:keys [object-store]} key {:keys [output-chan] convert-value-opts :convert-value :or {convert-value-opts true}}]
+   {:pre [object-store key]}
+   (let [ch      (or output-chan (promise-chan))
+         request (.delete object-store (resolve-key-range key convert-value-opts))]
+     (setup-request-handlers request ch)
+     ch))
+  ([object-store-instance key]
+   (delete object-store-instance key nil)))
 
 (defn delete-index
   [{:keys [object-store]} index-name]
@@ -86,9 +90,9 @@
   (.deleteIndex object-store index-name))
 
 (defn put
-  ([{:keys [object-store]} item key {convert-value-opts :convert-value convert-result-opts :convert-result :or {convert-value-opts true convert-result-opts true}}]
+  ([{:keys [object-store]} item key {:keys [output-chan] convert-value-opts :convert-value convert-result-opts :convert-result :or {convert-value-opts true convert-result-opts true}}]
    {:pre [object-store item]}
-   (let [ch (promise-chan)
+   (let [ch      (or output-chan (promise-chan))
          data    (convert-value item convert-value-opts)
          request (if (some? key)
                    (.put object-store data key)
