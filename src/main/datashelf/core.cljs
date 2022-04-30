@@ -1,10 +1,4 @@
-(ns datashelf.core
-  (:require [clojure.core.async :refer [<! >! go go-loop]]
-            [datashelf.database :as db]))
-
-(defn main
-  []
-  (println "test"))
+(ns datashelf.core)
 
 (defn indexed-db-supported?
   []
