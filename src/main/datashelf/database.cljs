@@ -16,37 +16,41 @@
     (make-object-store-instance (.createObjectStore db store-name js-opts))))
 
 (defn open
-  [db-name version callback]
-  (let [ch (promise-chan)]
-    (let [open-request (.open js/indexedDB db-name (when version (long version)))]
-      (set! (.-onupgradeneeded open-request)
-            (fn [e]
-              (let [old-version (.-oldVersion e)
-                    new-version (.-newVersion e)
-                    tx (.-transaction open-request)
-                    db (.-result open-request)]
-                (js/console.log tx)
-                (when (and callback db)
-                  (callback (make-db-instance db) {:old-version old-version
-                                                   :new-version new-version
-                                                   :transaction (make-transaction-instance tx)
-                                                   :event e})))))
+  ([db-name version callback {:keys [output-chan]}]
+   (let [ch (or output-chan (promise-chan))
+         open-request (.open js/indexedDB db-name (when version (long version)))]
+     (set! (.-onupgradeneeded open-request)
+           (fn [e]
+             (let [old-version (.-oldVersion e)
+                   new-version (.-newVersion e)
+                   tx (.-transaction open-request)
+                   db (.-result open-request)]
+               (js/console.log tx)
+               (when (and callback db)
+                 (callback (make-db-instance db) {:old-version old-version
+                                                  :new-version new-version
+                                                  :transaction (make-transaction-instance tx)
+                                                  :event e})))))
 
-      (set! (.-onsuccess open-request)
-            (fn [_]
-              (debug "success")
-              (let [db (.-result open-request)]
-                (go
-                  (>! ch (databox/success (make-db-instance db)))
-                  (close! ch)))))
+     (set! (.-onsuccess open-request)
+           (fn [_]
+             (debug "success")
+             (let [db (.-result open-request)]
+               (go
+                 (>! ch (databox/success (make-db-instance db)))
+                 (close! ch)))))
 
-      (set! (.-onerror open-request)
-            (fn [_]
-              (debug "error")
-              (let [error (.-error open-request)]
-                (go
-                  (>! ch (databox/failure error)))))))
-    ch))
+     (set! (.-onerror open-request)
+           (fn [_]
+             (debug "error")
+             (let [error (.-error open-request)]
+               (go
+                 (>! ch (databox/failure error))))))
+
+     ch))
+
+  ([db-name version callback]
+   (open db-name version callback nil)))
 
 (defn upgrade-db-fn
   [old-version fns]
