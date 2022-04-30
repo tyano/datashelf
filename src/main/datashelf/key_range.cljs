@@ -1,5 +1,5 @@
 (ns datashelf.key-range
-  (:require [datashelf.request :as req]))
+  (:require [datashelf.request :refer [convert-value] :as req]))
 
 (defrecord KeyRange [key-range])
 
@@ -10,7 +10,7 @@
 
 (defn key-range?
   [maybe-key-range]
-  (and (some? maybe-key-range) 
+  (and (some? maybe-key-range)
        (instance? KeyRange maybe-key-range)))
 
 (defn to-js
@@ -50,13 +50,13 @@
    (let [lower (req/convert-value lower convert-value-opts)
          upper (req/convert-value upper convert-value-opts)]
      (make-key-range-instance (js/IDBKeyRange.bound lower upper lower-open upper-open))))
-  
+
   ([lower upper lower-open upper-open]
    (bound lower upper lower-open upper-open nil))
-  
+
   ([lower upper lower-open]
    (bound lower upper lower-open false))
-  
+
   ([lower upper]
    (bound lower upper false)))
 
@@ -81,5 +81,7 @@
   (.-upperOpen key-range))
 
 (defn resolve-key-range
-  [maybe-key-range]
-  (if (key-range? maybe-key-range) (to-js maybe-key-range) maybe-key-range))
+  [maybe-key-range convert-value-opts]
+  (if (key-range? maybe-key-range)
+    (to-js maybe-key-range)
+    (convert-value maybe-key-range convert-value-opts)))
