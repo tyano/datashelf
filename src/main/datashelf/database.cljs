@@ -1,5 +1,5 @@
 (ns datashelf.database
-  (:require [clojure.core.async :refer [>! close! go promise-chan]]
+  (:require [clojure.core.async :refer [>! close! go chan]]
             [databox.core :as databox]
             [datashelf.lang.core :refer [keep-keys to-camel-case]]
             [datashelf.object-store.instance :refer [make-object-store-instance]]
@@ -17,7 +17,7 @@
 
 (defn open
   ([db-name version callback {:keys [output-chan]}]
-   (let [ch (or output-chan (promise-chan))
+   (let [ch (or output-chan (chan 1))
          open-request (.open js/indexedDB db-name (when version (long version)))]
      (set! (.-onupgradeneeded open-request)
            (fn [e]

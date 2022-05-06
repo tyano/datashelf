@@ -1,7 +1,7 @@
 (ns datashelf.query
   (:refer-clojure :exclude [count get name key])
   (:require [clojure.core :as core]
-            [clojure.core.async :refer [>! chan close! go promise-chan put!]]
+            [clojure.core.async :refer [>! chan close! go chan put!]]
             [databox.core :as databox]
             [datashelf.cursor :refer [make-cursor-instance] :as csr]
             [datashelf.key-range :refer [key-range? resolve-key-range] :as key-range]
@@ -16,10 +16,10 @@
   (satisfies? Queriable obj))
 
 (defn count
-  ([instance query {convert-value-opts :convert-value :or {convert-value-opts true}}]
+  ([instance query {:keys [out-chan] convert-value-opts :convert-value :or {convert-value-opts true}}]
    {:pre [(queriable? instance) (some? (js-instance instance))]}
-   (let [js-obj (js-instance instance)
-         ch (promise-chan)
+   (let [js-obj  (js-instance instance)
+         ch      (or out-chan (chan 1))
          request (if-let [range (resolve-key-range query convert-value-opts)]
                    (.count js-obj range)
                    (.count js-obj))]
@@ -36,7 +36,7 @@
   ([instance key {:keys [output-chan] convert-value-opts :convert-value convert-result-opts :convert-result :or {convert-value-opts true convert-result-opts true}}]
    {:pre [(queriable? instance) (some? (js-instance instance)) key]}
    (let [js-obj  (js-instance instance)
-         ch      (or output-chan (promise-chan))
+         ch      (or output-chan (chan 1))
          request (.get js-obj (resolve-key-range key convert-value-opts))]
      (setup-request-handlers request ch (result-converter convert-result-opts))
      ch))
@@ -48,7 +48,7 @@
   ([instance key {:keys [output-chan] convert-value-opts :convert-value convert-result-opts :convert-result :or {convert-value-opts true convert-result-opts true}}]
    {:pre [(queriable? instance) (some? (js-instance instance)) key]}
    (let [js-obj  (js-instance instance)
-         ch      (or output-chan (promise-chan))
+         ch      (or output-chan (chan 1))
          request (.getKey js-obj (resolve-key-range key convert-value-opts))]
      (setup-request-handlers request ch (result-converter convert-result-opts))
      ch))
@@ -62,7 +62,7 @@
    {:pre [(queriable? instance) (some? (js-instance instance))
           (if count (or (zero? count) (pos-int? count)) true)]}
    (let [js-obj  (js-instance instance)
-         ch      (or output-chan (promise-chan))
+         ch      (or output-chan (chan 1))
          range   (resolve-key-range query convert-value-opts)
          request (cond
                    (and range count)
@@ -91,7 +91,7 @@
    {:pre [(queriable? instance) (some? (js-instance instance))
           (if count (or (zero? count) (pos-int? count)) true)]}
    (let [js-obj  (js-instance instance)
-         ch      (or output-chan (promise-chan))
+         ch      (or output-chan (chan 1))
          range   (resolve-key-range query convert-value-opts)
          request (cond
                    (and range count)
@@ -120,7 +120,7 @@
           (key-range? range)
           (if direction (#{:next :nextunique :prev :prevunique} direction) true)]}
    (let [js-obj    (js-instance instance)
-         result-ch (or output-chan (promise-chan))
+         result-ch (or output-chan (chan 1))
          range     (resolve-key-range range convert-value-opts)
          request   (cond
                      (and range direction)
@@ -174,7 +174,7 @@
 
 (defn value-chan
   ([instance query direction {:keys [output-chan] :as options}]
-   (let [ch (or output-chan (chan))]
+   (let [ch (or output-chan (chan 1))]
      (open-cursor instance
                   query
                   direction
@@ -204,7 +204,7 @@
    {:pre [(queriable? instance) (some? (js-instance instance))
           (if direction (#{:next :nextunique :prev :prevunique} direction) true)]}
    (let [js-obj    (js-instance instance)
-         result-ch (or output-chan (promise-chan))
+         result-ch (or output-chan (chan 1))
          range     (resolve-key-range query convert-value-opts)
          request   (cond
                      (and range direction)

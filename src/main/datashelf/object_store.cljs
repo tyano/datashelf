@@ -1,6 +1,6 @@
 (ns datashelf.object-store
   (:refer-clojure :exclude [count get name key])
-  (:require [clojure.core.async :refer [promise-chan]]
+  (:require [clojure.core.async :refer [chan]]
             [datashelf.index :refer [make-index-instance]]
             [datashelf.key-range :refer [resolve-key-range] :as key-range]
             [datashelf.lang.core :as lang]
@@ -36,7 +36,7 @@
 (defn add
   ([{:keys [object-store]} value key {output-chan :output-chan convert-value-opts :convert-value convert-result-opts :convert-result :or {convert-value-opts true convert-result-opts true}}]
    {:pre [object-store value value]}
-   (let [ch      (or output-chan (promise-chan))
+   (let [ch      (or output-chan (chan 1))
          data    (convert-value value convert-value-opts)
          request (if key
                    (.add object-store data key)
@@ -53,7 +53,7 @@
 (defn clear
   ([{:keys [object-store]} {:keys [output-chan]}]
    {:pre [object-store]}
-   (let [ch      (or output-chan (promise-chan))
+   (let [ch      (or output-chan (chan 1))
          request (.clear object-store)]
      (setup-request-handlers request ch)
      ch))
@@ -77,7 +77,7 @@
 (defn delete
   ([{:keys [object-store]} key {:keys [output-chan] convert-value-opts :convert-value :or {convert-value-opts true}}]
    {:pre [object-store key]}
-   (let [ch      (or output-chan (promise-chan))
+   (let [ch      (or output-chan (chan 1))
          request (.delete object-store (resolve-key-range key convert-value-opts))]
      (setup-request-handlers request ch)
      ch))
@@ -92,7 +92,7 @@
 (defn put
   ([{:keys [object-store]} item key {:keys [output-chan] convert-value-opts :convert-value convert-result-opts :convert-result :or {convert-value-opts true convert-result-opts true}}]
    {:pre [object-store item]}
-   (let [ch      (or output-chan (promise-chan))
+   (let [ch      (or output-chan (chan 1))
          data    (convert-value item convert-value-opts)
          request (if (some? key)
                    (.put object-store data key)
