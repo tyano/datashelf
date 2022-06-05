@@ -45,7 +45,8 @@
              (debug "error")
              (let [error (.-error open-request)]
                (go
-                 (>! ch (databox/failure error))))))
+                 (>! ch (databox/failure error))
+                 (close! ch)))))
 
      ch))
 
