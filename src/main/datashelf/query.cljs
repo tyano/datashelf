@@ -116,8 +116,9 @@
 
 (defn open-cursor
   ([instance range direction callback {:keys [output-chan] convert-value-opts :convert-value :or {convert-value-opts true}}]
-   {:pre [(queriable? instance) (some? (js-instance instance))
-          (key-range? range)
+   {:pre [(queriable? instance) 
+          (some? (js-instance instance))
+          (if range (key-range? range) true)
           (if direction (#{:next :nextunique :prev :prevunique} direction) true)]}
    (let [js-obj    (js-instance instance)
          result-ch (or output-chan (chan 1))
