@@ -67,9 +67,19 @@
   instance)
 
 (defn delete
-  [{:keys [cursor] :as instance}]
+  [{:keys [cursor] :as instance} & [{:keys [success-fn error-fn]}]]
   {:pre [cursor]}
-  (.delete cursor)
+  (let [request (.delete cursor)]
+    (set! (.-onsuccess request)
+          (fn [_]
+            (when success-fn
+              (success-fn))))
+    
+    (set! (.-onerror request)
+          (fn [_]
+            (when error-fn
+              (let [error (.-error request)]
+                (error-fn error))))))
   instance)
 
 (defn update
@@ -89,7 +99,4 @@
            (fn [_]
              (when error-fn
                (let [error (.-error request)]
-                 (error-fn error)))))
-
-     
-     )))
+                 (error-fn error))))))))
