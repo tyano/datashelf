@@ -51,7 +51,10 @@
      ch))
 
   ([db-name version callback]
-   (open db-name version callback nil)))
+   (open db-name version callback nil))
+  
+  ([db-name version]
+   (open db-name version nil)))
 
 (defn upgrade-db-fn
   [old-version fns]
